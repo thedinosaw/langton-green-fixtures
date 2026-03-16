@@ -1,5 +1,4 @@
 import fs from 'fs';
-import cheerio from 'cheerio';
 
 const SOURCE_URL = 'https://fulltime.thefa.com/fixtures.html?league=4344945';
 const TEAM_KEYWORD = 'langton green';
@@ -19,10 +18,7 @@ async function main() {
 
   const html = await response.text();
   const fixtures = extractFixtures(html)
-    .filter(f => {
-      const combined = `${f.home} ${f.away}`.toLowerCase();
-      return combined.includes(TEAM_KEYWORD);
-    })
+    .filter(f => `${f.home} ${f.away}`.toLowerCase().includes(TEAM_KEYWORD))
     .filter(f => withinWindow(f.dateIso, LOOK_AHEAD_DAYS));
 
   const output = {
@@ -38,12 +34,22 @@ async function main() {
 }
 
 function extractFixtures(html) {
-  const $ = cheerio.load(html);
-  const text = $('body').text();
+  let text = html;
+
+  text = text.replace(/<script[\s\S]*?<\/script>/gi, ' ');
+  text = text.replace(/<style[\s\S]*?<\/style>/gi, ' ');
+  text = text.replace(/<!--[\s\S]*?-->/g, ' ');
+  text = text.replace(/<br\s*\/?>/gi, '\n');
+  text = text.replace(/<\/(p|div|li|tr|td|th|a|span|section|h1|h2|h3|h4)>/gi, '\n');
+  text = text.replace(/<[^>]+>/g, ' ');
+  text = decodeEntities(text);
+  text = text.replace(/\u00a0/g, ' ');
+  text = text.replace(/[ \t]+/g, ' ');
+  text = text.replace(/\n+/g, '\n');
 
   const lines = text
     .split('\n')
-    .map(s => s.replace(/\s+/g, ' ').trim())
+    .map(s => s.trim())
     .filter(Boolean);
 
   const fixtures = [];
@@ -113,6 +119,19 @@ function withinWindow(dateIso, daysAhead) {
 
 function clean(s) {
   return (s || '').replace(/\s+/g, ' ').trim();
+}
+
+function decodeEntities(str) {
+  const map = {
+    '&amp;': '&',
+    '&quot;': '"',
+    '&#39;': "'",
+    '&apos;': "'",
+    '&lt;': '<',
+    '&gt;': '>',
+    '&nbsp;': ' '
+  };
+  return str.replace(/&amp;|&quot;|&#39;|&apos;|&lt;|&gt;|&nbsp;/g, m => map[m] || m);
 }
 
 main().catch(err => {
